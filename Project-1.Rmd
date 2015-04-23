@@ -1,0 +1,93 @@
+## Practical Machine Learning: Prediction Assignment Writeup
+
+### Project Synopsis
+
+With the help of popular fitness devices such as Jawbone Up, Nike FuelBand, and Fitbit, it is now possible to collect a large amount of data about personal activity relatively inexpensively. These devices quantify someones movement and can be utilized to identify a patterns in their workout behavior. beside how much of a particular activity the users are doing, this project also aims to quantify how well theyare doing it using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal for the project is to prduce a calssifier that orreclty classifies 20 samples provided as a testing set that needs to submitted for grading.
+
+### Data Location
+
+The training data for this project is located here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data for this project is located here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### Load Libraries
+
+Load Required Libraries for Data Processing and Analysis
+
+```{r}
+options(warn = - 1) # Turn off warning messages which make the report unusually  lengthy
+library(randomForest)
+library(caret)
+library(foreach)
+library(Hmisc)
+library(doParallel)
+```
+
+### Set a Seed
+
+Set a seed to initialize the pseudorandom number generation and get same results each time
+
+```{r}
+set.seed(2500)
+```
+
+### Load the data from CSV files
+
+```{r}
+train_dataset <- read.csv("pml-training.csv", na.strings = c("#DIV/0!") )
+test_dataset <- read.csv("pml-testing.csv", na.strings = c("#DIV/0!") )
+```
+
+### Format Data
+
+Data is to reformat to 8 columns and remove the non contributor data from the datasets.
+
+```{r}
+for(i in c(8:ncol(train_dataset)-1)) {train_dataset[,i] = as.numeric(as.character(train_dataset[,i]))}
+
+for(i in c(8:ncol(test_dataset)-1)) {test_dataset[,i] = as.numeric(as.character(test_dataset[,i]))}
+
+train_feature_dataset <- colnames(train_dataset[colSums(is.na(train_dataset)) == 0])[- (1:7)]
+model_data <- train_dataset[train_feature_dataset]
+
+train_feature_dataset
+```
+
+### Split Data and Create Prediction Model
+
+80% of the testing data is selected randomly and put into the training sample and the remaining 20% is used for cross-validation. This ensures a good balance between performance of the model and minimizes the Out of sample error.
+
+```{r}
+training_index_dataset <- createDataPartition(y = model_data$classe, p = 0.8, list = FALSE )
+training_model <- model_data[training_index_dataset, ]
+testing_model <- model_data[- training_index_dataset, ]
+```
+
+200 trees with 10 random forest algorithm are created using parallel processing for faster performance.
+
+```{r}
+registerDoParallel()
+x <- training_model[- ncol(training_model)]
+y <- training_model$classe
+
+randomforest_model <- foreach(ntree = rep(100, 10), .combine = randomForest::combine, .packages = 'randomForest') %dopar% {
+randomForest(x, y, ntree = ntree) 
+}
+```
+
+### Cross Validate Model and Calculate Out of Sample Error
+
+The following matrices can be used to estimate the model accuracy as well as out of sample error.
+
+```{r}
+train_prediction_model <- predict(randomforest_model, newdata = training_model)
+confusionMatrix(train_prediction_model, training_model$classe)
+
+test_prediction_model <- predict(randomforest_model, newdata = testing_model)
+confusionMatrix(test_prediction_model, testing_model$classe)
+
+```
+
+### Concusion
+
+The accuracy of the model is 0.9975 and the out of sample error is 0.0025, calculated as Out of sample error = 1 - Accuracy of predictions made against the cross-validation set.
